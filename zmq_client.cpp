@@ -41,12 +41,14 @@ int main(int argc, char** argv) {
   long duration = now_ms.time_since_epoch().count();
 
   cv::Size size_small, size;
+  size.height = 1080;
+  size.width = 1920;
   size_small.height = 368;
   size_small.width = 640;
   if (do_resize) {
-    num_pixels = size_small.height * size_small.width * num_channels;
     size = size_small;
   }
+  num_pixels = size_small.height * size_small.width * num_channels;
   std::cout << "Number of pixels: " << num_pixels << std::endl;
   cv::Mat frame_rcv = cv::Mat(size, CV_8UC3);
 
@@ -73,9 +75,8 @@ int main(int argc, char** argv) {
     now = std::chrono::system_clock::now();
     now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
     duration = now_ms.time_since_epoch().count();
-    memcpy(&input_time, (img_msg_cli.data()+num_pixels), sizeof(long));
     // std::cout << "Client receive image message time (us): " << timer.tock_count() << std::endl;
-    std::cout << "Client receive image message time (us): " << duration - input_time << std::endl;
+    std::cout << "Client receive message size: " << img_msg_cli.size() << std::endl;
 
     timer.tick();
     memcpy((void*)(frame_rcv.data), (img_msg_cli.data()), num_pixels);
@@ -84,6 +85,8 @@ int main(int argc, char** argv) {
       cv::imwrite(str, frame_rcv);
     }
     std::cout << "Client memcpy image time (us): " << timer.tock_count() << std::endl;
+    memcpy(&input_time, (img_msg_cli.data()+num_pixels), sizeof(long));
+    std::cout << "Client receive image message time (us): " << duration - input_time << std::endl;
 
     // Client send reply
     memcpy(reply_msg_cli.data(), reply_msg.data(), 2);

@@ -74,6 +74,9 @@ int main(int argc, char** argv) {
   TimerMicroSecconds timer;
   int frame_count = 0;
   while (read_success) {
+    now = std::chrono::system_clock::now();
+    now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
+    duration = now_ms.time_since_epoch().count();
     if (do_resize) {
       timer.tick();
       cv::resize(frame, frame, size_small);
@@ -89,9 +92,6 @@ int main(int argc, char** argv) {
     std::cout << "Server copy image to message time (us): " << timer.tock_count() << std::endl;
 
     timer.tick();
-    auto now = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-    long duration = now_ms.time_since_epoch().count();
     memcpy(img_msg_srv.data()+num_pixels, (void*)(&duration), sizeof(long));
     sock_srv.send(img_msg_srv);
     std::cout << "Server send image message time (us): " << timer.tock_count() << std::endl;
