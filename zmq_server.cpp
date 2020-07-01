@@ -2,17 +2,14 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <zmq.hpp>
 #include <thread>
 #include <chrono>
 #include <stdio.h>
 #include <signal.h>
 #include <opencv2/opencv.hpp>
+#include <zmq.hpp>
 
-// Timer related
-#include <sys/time.h>
-#include <chrono>
-
+#include "timer.h"
 
 #define LOGGER_LENGTH 30
 #define TIMER_EXPR(timer_, expr_, desc_)                         \
@@ -21,43 +18,6 @@
        expr_;                                                    \
        std::cout << desc_ << timer_.tock_count() << std::endl;   \
     } while(0)
-
-// It is a stopwatch which ticks and tocks
-template<typename T>
-class Timer {
- public:
-  Timer() {
-    tick();
-  }
-
-  void tick() {
-    begin_time = std::chrono::steady_clock::now();
-  }
-
-  void tock() {
-    time_elapsed = std::chrono::duration_cast<T>(std::chrono::steady_clock::now() - begin_time);
-  }
-
-  long tock_count() {
-    time_elapsed = std::chrono::duration_cast<T>(std::chrono::steady_clock::now() - begin_time);
-    return long(time_elapsed.count());
-  }
-
-  T get_duration() const {
-    return time_elapsed;
-  }
-
-  std::chrono::time_point<std::chrono::steady_clock> get_starttime() const {
-    return begin_time;
-  }
-
- private:
-  std::chrono::time_point<std::chrono::steady_clock> begin_time;
-
-  T time_elapsed;
-};
-
-typedef Timer<std::chrono::microseconds> TimerMicroSecconds;
 
 std::ofstream myfile;
 
@@ -74,14 +34,6 @@ int main(int argc, char** argv) {
   zmq::socket_t sock_srv(ctx_srv, zmq::socket_type::rep);
   sock_srv.bind("tcp://*:50051");
 
-  // Client
-  zmq::context_t ctx_cli;
-  zmq::socket_t sock_cli(ctx_cli, zmq::socket_type::req);
-  sock_cli.connect("tcp://localhost:50051");
-
-  auto start = std::chrono::steady_clock::now();
-  auto end =   std::chrono::steady_clock::now();
-
   signal(SIGINT, signal_handler);
   myfile.open("server.txt");
   char *str = new char[LOGGER_LENGTH];
@@ -94,6 +46,9 @@ int main(int argc, char** argv) {
   cv::Mat frame;
   read_success = cap.read(frame);
 
+  auto now = std::chrono::system_clock::now();
+  auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
+  long duration = now_ms.time_since_epoch().count();
   cv::Size size = frame.size();
   cv::Size size_small;
   size_small.height = 368;
@@ -106,22 +61,10 @@ int main(int argc, char** argv) {
   }
 
   std::cout << "Number of pixels: " << num_pixels << std::endl;
-  cv::Mat frame_rcv = cv::Mat(size, CV_8UC3);
 
   // Data messages
   zmq::message_t img_msg_srv(num_pixels);
-  zmq::message_t img_msg_cli(num_pixels);
-
-  std::string reply_msg = "OK";
-  zmq::message_t reply_msg_cli(2);
-  memcpy(reply_msg_cli.data(), reply_msg.data(), 2);
   zmq::message_t reply_msg_rcv(2);
-
-  start = std::chrono::steady_clock::now();
-  end = std::chrono::steady_clock::now();
-
-  // Initialize connection
-  sock_cli.send(reply_msg_cli);
 
   // Server receive reply
   sock_srv.recv(&reply_msg_rcv);
@@ -138,31 +81,20 @@ int main(int argc, char** argv) {
     }
 
     timer.tick();
-    zmq::message_t img_msg_srv(num_pixels);
+    // The image and the input time
+    zmq::message_t img_msg_srv(num_pixels+sizeof(long));
+
     // Server send image
     memcpy(img_msg_srv.data(), (void*)(frame.data), num_pixels);
     std::cout << "Server copy image to message time (us): " << timer.tock_count() << std::endl;
 
     timer.tick();
+    auto now = std::chrono::system_clock::now();
+    auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
+    long duration = now_ms.time_since_epoch().count();
+    memcpy(img_msg_srv.data()+num_pixels, (void*)(&duration), sizeof(long));
     sock_srv.send(img_msg_srv);
     std::cout << "Server send image message time (us): " << timer.tock_count() << std::endl;
-
-    // Client receive image
-    timer.tick();
-    sock_cli.recv(&img_msg_cli);
-    std::cout << "Client receive image message time (us): " << timer.tock_count() << std::endl;
-
-    timer.tick();
-    memcpy((void*)(frame_rcv.data), (img_msg_cli.data()), num_pixels);
-    if (++frame_count < 20) {
-	    sprintf(str, "debug/img_%d.jpg", frame_count);
-      cv::imwrite(str, frame_rcv);
-    }
-    std::cout << "Client memcpy image time (us): " << timer.tock_count() << std::endl;
-
-    // Client send reply
-    memcpy(reply_msg_cli.data(), reply_msg.data(), 2);
-    sock_cli.send(reply_msg_cli);
 
     // Server receive reply
     timer.tick();
@@ -170,9 +102,10 @@ int main(int argc, char** argv) {
     std::cout << "Server received reply time (us): " << timer.tock_count() << std::endl;
     std::cout << std::string(static_cast<char*>(reply_msg_rcv.data()), 2) + "\n" << std::endl; 
 
-    // timer.tick();
-    // read_success = cap.read(frame);
-    // std::cout << "Image read time (us): " << timer.tock_count() << std::endl;
+    // Read a frame from video stream
+    timer.tick();
+    read_success = cap.read(frame);
+    std::cout << "Image read time (us): " << timer.tock_count() << std::endl;
   }
   delete[] str;
   myfile.close();

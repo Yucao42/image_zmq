@@ -10,6 +10,7 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 include_directories(
+   "./"
    "${OpenCV_INCLUDE_DIRS}"
    )
 if(NOT MSVC)
@@ -24,3 +25,5 @@ add_compile_options(${ZMQFLAGS})
 # compile zmq database
 add_executable(zmq_server zmq_server.cpp)
 target_link_libraries(zmq_server zmq ${OpenCV_LIBS})     
+add_executable(zmq_client zmq_client.cpp)
+target_link_libraries(zmq_client zmq ${OpenCV_LIBS})     
