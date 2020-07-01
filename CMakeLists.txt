@@ -14,7 +14,7 @@ include_directories(
    "${OpenCV_INCLUDE_DIRS}"
    )
 if(NOT MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fPIC -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare -g -O3 -Wall -Wextra")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fPIC -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare -g -O3 -Wall -Wextra")
   set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS} -DFINTEGER=int  -fopenmp -g ")
 else()
   add_definitions(-D_WIN32_WINNT=0x600)

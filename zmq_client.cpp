@@ -1,99 +1,35 @@
 #include <iostream>
-#include <fstream>
 #include <string>
 #include <vector>
-#include <thread>
-#include <chrono>
 #include <stdio.h>
-#include <signal.h>
 #include <opencv2/opencv.hpp>
 #include <zmq.hpp>
 
-#include "timer.h"
-
-#define LOGGER_LENGTH 30
-
-std::ofstream myfile;
-
-void signal_handler(int signum)
-{
-	myfile.close();
-	exit(signum);
-}
+#include "zmq_service.hpp"
 
 int main(int argc, char** argv) {
-  // Client
-  zmq::context_t ctx_cli;
-  zmq::socket_t sock_cli(ctx_cli, zmq::socket_type::req);
-  sock_cli.connect("tcp://localhost:50051");
+  std::string addr("tcp://localhost:50051");
 
-  signal(SIGINT, signal_handler);
-  myfile.open("client.txt");
-  char *str = new char[LOGGER_LENGTH];
-  long int time_elapsed;
-  size_t num_pixels;
-  int num_query, num_channels = 3;
-  bool read_success;
-  bool do_resize=true;
+  char str[30];
+  ZmqClient client(addr);
 
-  auto now = std::chrono::system_clock::now();
-  auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-  long duration = now_ms.time_since_epoch().count();
-
-  cv::Size size_small, size;
-  size.height = 1080;
-  size.width = 1920;
+  cv::Size size_small;
   size_small.height = 368;
   size_small.width = 640;
-  if (do_resize) {
-    size = size_small;
-  }
-  num_pixels = size_small.height * size_small.width * num_channels;
-  std::cout << "Number of pixels: " << num_pixels << std::endl;
-  cv::Mat frame_rcv = cv::Mat(size, CV_8UC3);
-
-  // Data messages
-  zmq::message_t img_msg_cli(num_pixels);
-
-  std::string reply_msg = "OK";
-  zmq::message_t reply_msg_cli(2);
-  memcpy(reply_msg_cli.data(), reply_msg.data(), 2);
-
-  // Initialize connection
-  sock_cli.send(reply_msg_cli);
-  std::cout << "Connection built: " << 
-      std::string(static_cast<char*>(reply_msg_cli.data()), 2) << std::endl; 
-
+  ImageData img(size_small, CV_8UC3);
   TimerMicroSecconds timer;
+
   int frame_count = 0;
   bool continue_=true;
-  long input_time;
-  while (continue_) {
-    // Client receive image
-    timer.tick();
-    sock_cli.recv(&img_msg_cli);
-    now = std::chrono::system_clock::now();
-    now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-    duration = now_ms.time_since_epoch().count();
-    // std::cout << "Client receive image message time (us): " << timer.tock_count() << std::endl;
-    std::cout << "Client receive message size: " << img_msg_cli.size() << std::endl;
-
-    timer.tick();
-    memcpy((void*)(frame_rcv.data), (img_msg_cli.data()), num_pixels);
-    if (0 && ++frame_count < 20) {
-	    sprintf(str, "debug/img_%d.jpg", frame_count);
-      cv::imwrite(str, frame_rcv);
+  if (client.initial_connection())
+    while (continue_) {
+      std::cout << "Server connection built" << std::endl;
+      // Client receive image
+      continue_ = client.recv(&img);
+      if (1 && ++frame_count < 20) {
+         sprintf(str, "debug/img_%d.jpg", frame_count);
+         cv::imwrite(str, img.frame);                
+      }
     }
-    std::cout << "Client memcpy image time (us): " << timer.tock_count() << std::endl;
-    memcpy(&input_time, (img_msg_cli.data()+num_pixels), sizeof(long));
-    std::cout << "Client receive image message time (us): " << duration - input_time << std::endl;
-
-    // Client send reply
-    memcpy(reply_msg_cli.data(), reply_msg.data(), 2);
-    sock_cli.send(reply_msg_cli);
-
-  }
-  delete[] str;
-  myfile.close();
   return 0;
 }
