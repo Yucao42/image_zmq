@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <numeric>
 #include <thread>
 #include <chrono>
 #include <memory>
@@ -83,6 +84,15 @@ struct ImageData : public Data {
   cv::Size target_size;
 };
 
+long get_average(const std::vector<long>& stats, const std::string& name="memcpy") {
+  long average;
+  if (stats.size()) {
+    average = std::accumulate(stats.begin(), stats.end(), 0.) / stats.size();
+    std::cout << "Average " << name << " time(us): " << average << std::endl;
+  }
+  return average;
+}
+
 /////////////////////////////////////////////////////
 ////Zmq Server to supply data
 /////////////////////////////////////////////////////
@@ -96,6 +106,7 @@ class ZmqServer {
     ctx_srv = std::make_unique<zmq::context_t>();
     sock_srv = std::make_unique<zmq::socket_t>(*ctx_srv, zmq::socket_type::rep);
     sock_srv->bind(address);
+    memcpy_time.reserve(10000);
   }
 
   // Accept connection from client
@@ -120,17 +131,21 @@ class ZmqServer {
   bool send(Data* data) {
     if (data->data_size == 0)
       return false;
+
     // data to message
+    timer.tick();
     zmq::message_t data_msg(data->data_size + HEADER_OFFSET);
 
     // add input time in the header field
+    data->to_bytes(data_msg.data() + HEADER_OFFSET);
+    std::cout << "Server memcpy time (us): " << timer.tock_count() << std::endl;
+    memcpy_time.emplace_back(timer.tock_count());
+
+    // send data
     auto now = std::chrono::system_clock::now();
     auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
     long input_time = now_ms.time_since_epoch().count();
     memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
-    data->to_bytes(data_msg.data() + HEADER_OFFSET);
-
-    // send data
     sock_srv->send(data_msg);
 
     // wait for reply
@@ -145,7 +160,10 @@ class ZmqServer {
     std::string abort_msg = "DONE";
     memcpy(abort_msg_srv.data(), abort_msg.data(), 4);
     sock_srv->send(abort_msg_srv);
+    get_average(memcpy_time, "memcpy");
   }
+
+  
 
   // Start the server
   void start() {
@@ -157,6 +175,8 @@ class ZmqServer {
 
   std::mutex mu;
   bool connected=false;
+  TimerMicroSecconds timer;
+  std::vector<long> memcpy_time;
 };
 
 /////////////////////////////////////////////////////
@@ -171,6 +191,8 @@ class ZmqClient {
     ctx_cli = std::make_unique<zmq::context_t>();
     sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, zmq::socket_type::req);
     sock_cli->connect(address);
+    memcpy_time.reserve(10000);
+    delivery_time.reserve(10000);
   }
 
   // Connect to server
@@ -207,9 +229,13 @@ class ZmqClient {
     long input_time;
     memcpy(&input_time, (msg_cli.data()), sizeof(long));
     std::cout << "Client receive image message time (us): " << cur_time - input_time << std::endl;
+    delivery_time.emplace_back(cur_time - input_time);
 
+    timer.tick();
     size_t data_size = msg_cli.size() - HEADER_OFFSET;
     bool valid_data = data->from_bytes(msg_cli.data() + HEADER_OFFSET, data_size);
+    std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
+    memcpy_time.emplace_back(timer.tock_count());
     std::string reply = valid_data ? "OK" : "FAILED";
     zmq::message_t msg_reply((void*)(reply.data()), reply.length());
     sock_cli->send(msg_reply);
@@ -220,6 +246,10 @@ class ZmqClient {
   void start() {
   }
 
+  long mean_delivery_time() {return get_average(delivery_time, "delivery");}
+
+  long mean_memcpy_time() {return get_average(memcpy_time, "memcpy");}
+
  private:
   std::unique_ptr<zmq::context_t> ctx_cli;
   std::unique_ptr<zmq::socket_t> sock_cli;
@@ -227,6 +257,9 @@ class ZmqClient {
   std::mutex mu;
   bool connected=false;
   bool finished=false;
+  TimerMicroSecconds timer;
+  std::vector<long> memcpy_time;
+  std::vector<long> delivery_time;
 };
 
 #endif

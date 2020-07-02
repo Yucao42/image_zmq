@@ -21,15 +21,17 @@ int main(int argc, char** argv) {
 
   int frame_count = 0;
   bool continue_=true;
-  if (client.initial_connection())
+  if (client.initial_connection()) {
     while (continue_) {
-      std::cout << "Server connection built" << std::endl;
       // Client receive image
       continue_ = client.recv(&img);
-      if (1 && ++frame_count < 20) {
+      if (0 && ++frame_count < 20) {
          sprintf(str, "debug/img_%d.jpg", frame_count);
          cv::imwrite(str, img.frame);                
       }
     }
+    client.mean_memcpy_time();
+    client.mean_delivery_time();
+  }
   return 0;
 }

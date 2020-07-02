@@ -31,5 +31,6 @@ int main(int argc, char** argv) {
     }
     server.end_connection();
   }
+  cap.release();
   return 0;
 }
