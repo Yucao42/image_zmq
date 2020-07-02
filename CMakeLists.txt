@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8)
 
 project(zmq_image C CXX)
  
+option(DO_VIDEO_TEST "Test video transmission" OFF)
+option(DO_LABEL_TEST "Test classification result transmission" ON)
 find_package(OpenCV)
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -14,13 +16,20 @@ include_directories(
    "${OpenCV_INCLUDE_DIRS}"
    )
 if(NOT MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fPIC -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare -g -O3 -Wall -Wextra")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fPIC -Wno-unused-variable -Wno-unused-parameter -Wno-maybe-uninitialized -Wno-sign-compare -Wno-pointer-arith -g -O3 -Wall -Wextra")
   set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS} -DFINTEGER=int  -fopenmp -g ")
 else()
   add_definitions(-D_WIN32_WINNT=0x600)
 endif()
 
 add_compile_options(${ZMQFLAGS})
+if (DO_VIDEO_TEST)
+  add_definitions(-DTEST_VIDEO)
+endif()
+
+if (DO_LABEL_TEST)
+  add_definitions(-DTEST_LABEL)
+endif()
 
 # compile zmq database
 add_executable(zmq_server zmq_server.cpp)

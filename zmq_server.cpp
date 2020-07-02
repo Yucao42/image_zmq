@@ -5,6 +5,7 @@
 #include <opencv2/opencv.hpp>
 #include <zmq.hpp>
 
+#include "data_struct.hpp"
 #include "zmq_service.hpp"
 
 int main(int argc, char** argv) {
@@ -16,6 +17,16 @@ int main(int argc, char** argv) {
   std::string addr("tcp://*:50051");
   ZmqServer server(addr);
 
+#ifdef TEST_LABEL
+  ClassificationData label("Car", 0.88);
+  if (server.initial_connection()) {
+    std::cout << "Server connection built" << std::endl;
+    server.send(&label);
+    server.end_connection();
+  }
+#endif
+
+#ifdef TEST_VIDEO
   // Prepare data
   ImageData img;
   img.set_resize(size_small);
@@ -32,5 +43,6 @@ int main(int argc, char** argv) {
     server.end_connection();
   }
   cap.release();
+#endif
   return 0;
 }

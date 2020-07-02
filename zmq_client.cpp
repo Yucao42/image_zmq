@@ -5,14 +5,26 @@
 #include <opencv2/opencv.hpp>
 #include <zmq.hpp>
 
+#include "data_struct.hpp"
 #include "zmq_service.hpp"
 
 int main(int argc, char** argv) {
   std::string addr("tcp://localhost:50051");
-
-  char str[30];
   ZmqClient client(addr);
 
+#ifdef TEST_LABEL
+  ClassificationData label;
+  if (client.initial_connection()) {
+    std::cout << "Client connection built" << std::endl;
+    // Client receive image
+    client.recv(&label);
+    client.mean_memcpy_time();
+    client.mean_delivery_time();
+    std::cout << "Received " << label.label << " " << label.score << std::endl;
+  }
+#endif
+#ifdef TEST_VIDEO
+  char str[30];
   cv::Size size_small;
   size_small.height = 368;
   size_small.width = 640;
@@ -33,5 +45,6 @@ int main(int argc, char** argv) {
     client.mean_memcpy_time();
     client.mean_delivery_time();
   }
+#endif
   return 0;
 }
