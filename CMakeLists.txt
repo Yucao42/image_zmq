@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 2.8)
 
 project(zmq_image C CXX)
  
-option(DO_VIDEO_TEST "Test video transmission" OFF)
-option(DO_LABEL_TEST "Test classification result transmission" ON)
+option(DO_VIDEO_TEST "Test video transmission" ON)
+option(DO_LABEL_TEST "Test classification result transmission" OFF)
 find_package(OpenCV)
 find_package(OpenMP)
 if (OPENMP_FOUND)

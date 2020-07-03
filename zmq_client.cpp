@@ -21,6 +21,8 @@ int main(int argc, char** argv) {
     client.mean_memcpy_time();
     client.mean_delivery_time();
     std::cout << "Received " << label.label << " " << label.score << std::endl;
+    // Receive the end connection message
+    client.recv(&label);
   }
 #endif
 #ifdef TEST_VIDEO
@@ -34,6 +36,7 @@ int main(int argc, char** argv) {
   int frame_count = 0;
   bool continue_=true;
   if (client.initial_connection()) {
+    std::cout << "Client connection built" << std::endl;
     while (continue_) {
       // Client receive image
       continue_ = client.recv(&img);

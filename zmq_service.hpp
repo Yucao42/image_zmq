@@ -97,6 +97,7 @@ class ZmqServer {
     memcpy(abort_msg_srv.data(), abort_msg.data(), 4);
     sock_srv->send(abort_msg_srv);
     get_average(memcpy_time, "memcpy");
+    connected = false;
   }
 
   
@@ -139,11 +140,7 @@ class ZmqClient {
     std::string connection_req = "ConnectionRequest";
     zmq::message_t msg_conn((void*)(connection_req.data()), connection_req.length());
     sock_cli->send(msg_conn);
-
-    // zmq::message_t msg_conn_reply;
-    // sock_cli->recv(&msg_conn_reply);
-    // std::string conn_rep(static_cast<char*>(msg_conn_reply.data()), msg_conn_reply.size());
-    // connected = (conn_rep == "OK");
+    connected = true;
     return true;
   }
 
@@ -155,6 +152,7 @@ class ZmqClient {
     if (msg_cli.size() == 4)
       if (std::string(static_cast<char*>(msg_cli.data()), 4) == "DONE") {
         finished = true;
+        connected = false;
         return false;
       }
 
@@ -181,6 +179,7 @@ class ZmqClient {
   // Start to work as client
   void start() {
   }
+  void end_connection() {connected = false;}
 
   long mean_delivery_time() {return get_average(delivery_time, "delivery");}
 
