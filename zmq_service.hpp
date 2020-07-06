@@ -73,7 +73,7 @@ class ZmqServer {
     zmq::message_t data_msg(data->data_size + HEADER_OFFSET);
 
     // add input time in the header field
-    data->to_bytes(data_msg.data() + HEADER_OFFSET);
+    data->to_bytes((char*)(data_msg.data()) + HEADER_OFFSET);
     std::cout << "Server memcpy time (us): " << timer.tock_count() << std::endl;
     memcpy_time.emplace_back(timer.tock_count());
 
@@ -167,11 +167,11 @@ class ZmqClient {
 
     timer.tick();
     size_t data_size = msg_cli.size() - HEADER_OFFSET;
-    bool valid_data = data->from_bytes(msg_cli.data() + HEADER_OFFSET, data_size);
+    bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
     std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
     memcpy_time.emplace_back(timer.tock_count());
     std::string reply = valid_data ? "OK" : "FAILED";
-    zmq::message_t msg_reply((void*)(reply.data()), reply.length());
+    zmq::message_t msg_reply((char*)(reply.data()), reply.length());
     sock_cli->send(msg_reply);
     return valid_data;
   }

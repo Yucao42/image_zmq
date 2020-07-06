@@ -97,7 +97,7 @@ struct ClassificationData : public Data {
     if (data_size == 0)
       return false;
     memcpy(buffer, (void*)(&score), sizeof(float));
-    memcpy(buffer + sizeof(float), (void*)(label.data()), label.size());
+    memcpy((char*)(buffer) + sizeof(float), (void*)(label.data()), label.size());
     return true;
   }
 
@@ -107,7 +107,7 @@ struct ClassificationData : public Data {
     memcpy((void*)(&score), buffer, sizeof(float));
     size_t string_size = size - sizeof(float);
     label.resize(string_size);
-    memcpy((void*)(label.data()), buffer + sizeof(float), string_size);
+    memcpy((void*)(label.data()), (char*)(buffer) + sizeof(float), string_size);
     return true;
   }
 

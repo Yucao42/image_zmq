@@ -30,7 +30,9 @@ int main(int argc, char** argv) {
   // Prepare data
   ImageData img;
   img.set_resize(size_small);
-  cv::VideoCapture cap("../sample_1080p_h264.mp4");
+  cv::VideoCapture cap(0);
+  if (!cap.isOpened())
+  	cap.open("../sample_1080p_h264.mp4");
 
   bool read_success = img.read_video(cap);
 
