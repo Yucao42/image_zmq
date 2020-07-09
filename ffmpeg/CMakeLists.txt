@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 project(ffmpeg_image C CXX)
  
 option(DO_SHM_TEST "Test shared memory transmission" OFF)
+option(SPAWN_PROCESSES "Spawn processes to read stream(otherwise threads)" OFF)
 
 find_package(OpenCV)
 find_package(OpenMP)
@@ -22,6 +23,13 @@ set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS} -DFINTEGER=int  -fopenmp -g ")
 if (DO_SHM_TEST)
   add_definitions(-DTEST_SHM)
 endif()
+
+if (SPAWN_PROCESSES)
+  add_definitions(-DSPAWN_PROCESSES)
+else()
+  add_definitions(-DSPAWN_THREADS)
+endif()
+
 
 # compile zmq database
 add_executable(ffmpeg_image ffmpeg_image.cpp)

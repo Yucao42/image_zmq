@@ -1,21 +1,23 @@
-# 
-# ffmpeg -re -i ../sample_1080p_h264.mp4 \
-#     -vf scale="640x368" -movflags faststart -b 90000k -f mpegts tcp://localhost:8999?listen \
-#     -vf scale="640x368" -movflags faststart -b 90000k -f mpegts tcp://localhost:8999?listen 
-# 
-# ffmpeg -re -i ../sample_1080p_h264.mp4 \
-#      -movflags faststart \
-#      -vf scale="640x368"  \
-#      -crf 17 \
-#      -b:v 90000k \
-#      -c:v libx264rgb \
-#      -f mpegts \
-#      tcp://localhost:8999?listen \
-#     -vf scale="640x368" -movflags faststart -b 90000k -f mpegts tcp://localhost:8999?listen \
-#   -vf scale="640x368" -movflags faststart -b 90000k -f mpegts tcp://localhost:9000?listen
-ffmpeg -re -i ../sample_1080p_h264.mp4 \
-    -vf scale="640x368" -movflags faststart -b:v 90000k -f mpegts tcp://localhost:8999?listen \
-    -vf scale="640x368" -movflags faststart -b:v 90000k -f mpegts tcp://localhost:9000?listen
+INPUT_VIDEO=../sample_1080p_h264.mp4
+BASE_PORT=8998
+NUM_THREADS=1
+STREAMING_CMD="ffmpeg -re -i ${INPUT_VIDEO} "
+SIZE=640x368
+LOSSLESS=""
+if ! [[ -z ${LOSSLESS} ]];then
+    ENCODING_FLAGS="-crf 0 -c:v libx264rgb "
+else
+    ENCODING_FLAGS=""
+fi
+    
+OUTPUT_CMD="-vf scale=${SIZE} -movflags faststart ${ENCODING_FLAGS} -b 90000k -an -f mpegts tcp://localhost:"
+CMD=$STREAMING_CMD
 
-#      -c:v huffyuv \
-#      -c:v libx264rgb \
+for THREAD_ID in `seq 1 $NUM_THREADS`;
+do
+    PORT=$(($BASE_PORT + $THREAD_ID))
+    CMD="${CMD} ${OUTPUT_CMD}${PORT}?listen "
+done
+
+echo ${CMD}
+${CMD}
