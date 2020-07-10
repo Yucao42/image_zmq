@@ -1,6 +1,6 @@
 INPUT_VIDEO=../sample_1080p_h264.mp4
 BASE_PORT=8998
-NUM_THREADS=1
+NUM_THREADS=2
 STREAMING_CMD="ffmpeg -re -i ${INPUT_VIDEO} "
 SIZE=640x368
 LOSSLESS=""
@@ -11,13 +11,17 @@ else
 fi
     
 OUTPUT_CMD="-vf scale=${SIZE} -movflags faststart ${ENCODING_FLAGS} -b 90000k -an -f mpegts tcp://localhost:"
-CMD=$STREAMING_CMD
+CMD=""
 
 for THREAD_ID in `seq 1 $NUM_THREADS`;
 do
     PORT=$(($BASE_PORT + $THREAD_ID))
-    CMD="${CMD} ${OUTPUT_CMD}${PORT}?listen "
+    if ! [[ -z ${CMD} ]];then
+        CMD="${CMD} & ${STREAMING_CMD} ${OUTPUT_CMD}${PORT}?listen "
+    else
+        CMD="${STREAMING_CMD} ${OUTPUT_CMD}${PORT}?listen "
+    fi
 done
 
 echo ${CMD}
-${CMD}
+# ${CMD}
