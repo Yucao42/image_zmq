@@ -54,7 +54,9 @@ void client(int port=50051) {
       // Client receive image
       continue_ = client.recv(&img);
       {
+#ifndef SPAWN_PROCESSES
         std::unique_lock<std::mutex> lk(mu);
+#endif
         auto now = std::chrono::system_clock::now();
         auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
         if (init_time == 0) {
@@ -62,7 +64,7 @@ void client(int port=50051) {
         } else {
           long time_passed = now_ms.time_since_epoch().count() - init_time; 
           fps = (++total) * 1.0 / time_passed * 1000000; 
-          std::cout << "FPS: " << fps << std::endl;
+          std::cout << "Port " << port << " FPS: " << fps << std::endl;
         }
       }
 
@@ -114,8 +116,8 @@ void server(int port=50051) {
   }
   cap.release();
 #endif
-
 }
+
 int main(int argc, char** argv) {
   int num_streams = 1;
   int base_port = 50060;
@@ -126,39 +128,46 @@ int main(int argc, char** argv) {
     num_streams = atoi(argv[1]);
   }
 
-  bool spawn_processes = true;
   std::vector<std::thread> server_threads;
   std::vector<std::thread> client_threads;
   for (int i = 0; i < num_streams; ++i) {
-    if (spawn_processes) {
+#ifdef SPAWN_PROCESSES
+    {
       // Fork server processes
       if (fork() == 0) {
-        server(base_port + i);
+        server(base_port + i * 2);
         return 0;
       }  
 
       // Fork client processes
       if (fork() == 0) {
-        client(base_port + i);
+        client(base_port + i * 2);
         return 0;
       }  
-    } else {
+    } 
+#else
+    {
       server_threads.reserve(num_streams);
       client_threads.reserve(num_streams);
-      server_threads.emplace_back(std::move(std::thread(server, base_port + i)));
-      client_threads.emplace_back(std::move(std::thread(client, base_port + i)));
+      server_threads.emplace_back(std::move(std::thread(server, base_port + i * 2)));
+      client_threads.emplace_back(std::move(std::thread(client, base_port + i * 2)));
     }
+#endif
   }
 
-  if (spawn_processes) {
+#ifdef SPAWN_PROCESSES
+  {
     // Wait for all the server/client processes to finish
     for (int i = 0; i < 2 * num_streams; ++i)
       wait(NULL);
-  } else {
+  } 
+#else 
+  {
     for (int i = 0; i < num_streams; ++i) {
       server_threads[i].join();
       client_threads[i].join();
     }
   }
+#endif
   return 0;
 }

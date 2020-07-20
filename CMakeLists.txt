@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
 project(zmq_image C CXX)
+option(SPAWN_PROCESSES "Test using fork, otherwise using threads" ON)
 option(DO_VIDEO_TEST "Test video transmission" ON)
 option(DO_LABEL_TEST "Test classification result transmission" OFF)
 find_package(OpenCV)
@@ -26,6 +27,10 @@ endif()
 add_compile_options(${ZMQFLAGS})
 if (DO_VIDEO_TEST)
   add_definitions(-DTEST_VIDEO)
+endif()
+
+if (SPAWN_PROCESSES)
+  add_definitions(-DSPAWN_PROCESSES)
 endif()
 
 if (DO_LABEL_TEST)
