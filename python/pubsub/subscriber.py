@@ -9,11 +9,10 @@ from zmq_service import image_client, image_server
 if __name__ == "__main__":
     if len (sys.argv) != 3:
         print('usage: subscriber.py address port')
-        address = "tcp://127.0.0.1"
-        port = 50060
+        ports = [50060]
     else:
-        address = sys.argv[1]
-        port = sys.argv[2]
+        ports = [int(port) for port in sys.argv[1:]]
 
-    server = image_client(address, port)
+    address = "tcp://127.0.0.1"
+    server = image_client(address, ports)
     server.streaming_read()

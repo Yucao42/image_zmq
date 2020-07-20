@@ -28,44 +28,48 @@ class image_server:
     def streaming(self, do_sync=True):
         if do_sync:
             self.sync()
+        count = 0
         if self.cap and self.cap.isOpened():
             ret = True
             while(ret):
                 ret, image = self.cap.read()
                 if ret:
-                    self.socket.send(image.tostring())
+                    print(image.shape)
+                    #self.socket.send(image.tostring())
+                    self.socket.send_pyobj([self.port, count, image])
+                    count += 1
                     print("sending")
 
-        self.socket.send(b"DONE")
+        self.socket.send_pyobj(b"DONE")
 
 class image_client:
-    def __init__(self, addr, port, mode=zmq.SUB):
+    def __init__(self, addr, ports, mode=zmq.SUB):
         self.addr = addr
-        self.port = port
+        self.ports = ports
         self.mode = mode
 
         self.ctx = zmq.Context.instance()
         self.socket = self.ctx.socket(mode)
-        self.socket.connect(addr + ':' + str(self.port))
+        for port in ports:
+            self.socket.connect(addr + ':' + str(port))
         self.socket.setsockopt(zmq.SUBSCRIBE,b'')
 
     def sync(self):
-        ctx = zmq.Context.instance()
-        s = ctx.socket(zmq.REQ)
-        s.connect(self.addr + ':' + str(self.port + 1))
-        s.send(b'READY')
-        s.recv()
+        for port in self.ports:
+            ctx = zmq.Context.instance()
+            s = ctx.socket(zmq.REQ)
+            s.connect(self.addr + ':' + str(port + 1))
+            s.send(b'READY')
+            s.recv()
 
     def streaming_read(self, do_sync=True):
         if do_sync:
             self.sync()
-        reply = self.socket.recv()
+        reply = self.socket.recv_pyobj()
+        image = reply
         count = 0
         while reply != b"DONE":
-            image = np.fromstring(reply, np.uint8)
-            print("receiving ", image.shape)
+            image = reply
+            print("receiving ", reply[0], " count: ", reply[1])
             count += 1
-            if count < 4:
-                suc = cv2.imwrite(f"{count}.jpg", image)
-                print(suc)
-            reply = self.socket.recv()
+            reply = self.socket.recv_pyobj()
