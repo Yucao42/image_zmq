@@ -106,6 +106,7 @@ class ZmqServer {
   }
 
   void end_connection() {
+    // Send a message to tell the client(s) to end communications
     zmq::message_t abort_msg_srv(4);
     std::string abort_msg = "DONE";
     memcpy(abort_msg_srv.data(), abort_msg.data(), 4);
