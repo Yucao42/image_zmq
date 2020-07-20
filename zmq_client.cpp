@@ -9,12 +9,13 @@
 #include "zmq_service.hpp"
 
 int main(int argc, char** argv) {
-  std::string addr("tcp://localhost:50051");
-  ZmqClient client(addr);
+  std::string addr("tcp://localhost");
+  int port = 50051;
+  ZmqClient client(addr, port, std::to_string(port));
 
 #ifdef TEST_LABEL
   ClassificationData label;
-  if (client.initial_connection()) {
+  if (client.sync_connection()) {
     std::cout << "Client connection built" << std::endl;
     // Client receive image
     client.recv(&label);
@@ -35,7 +36,7 @@ int main(int argc, char** argv) {
 
   int frame_count = 0;
   bool continue_=true;
-  if (client.initial_connection()) {
+  if (client.sync_connection()) {
     std::cout << "Client connection built" << std::endl;
     while (continue_) {
       // Client receive image

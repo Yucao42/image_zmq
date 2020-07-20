@@ -29,6 +29,10 @@ long get_average(const std::vector<long>& stats, const std::string& name="memcpy
   return average;
 }
 
+static std::string make_address_plus_port(const std::string& addr, int port) {
+  return addr + ":" + std::to_string(port);
+}
+
 /////////////////////////////////////////////////////
 ////Zmq Server to supply data
 /////////////////////////////////////////////////////
@@ -38,29 +42,44 @@ class ZmqServer {
   ZmqServer(ZmqServer& other) = delete;
   ZmqServer(ZmqServer&& other) = delete;
   
-  ZmqServer(std::string address) {
+  ZmqServer(std::string address, int port, int expected_clients=1) {
     ctx_srv = std::make_unique<zmq::context_t>();
-    sock_srv = std::make_unique<zmq::socket_t>(*ctx_srv, zmq::socket_type::rep);
-    sock_srv->bind(address);
+    sock_srv = std::make_unique<zmq::socket_t>(*ctx_srv, zmq::socket_type::pub);
+    address_ = address;
+    port_ = port;
+    expected_clients_ = expected_clients;
+    bind_to = make_address_plus_port(address, port);
+    sock_srv->bind(bind_to);
     memcpy_time.reserve(10000);
   }
 
-  // Accept connection from client
-  bool initial_connection() {
+  // Synchronize with expected client to get connected
+  bool sync_connection() {
     std::unique_lock<std::mutex> lk(mu);
-    // Currently only do 1-to-1 connection
-    // If already connected, abort
-    if (connected)
+    if (sync_connected)
       return false;
-    zmq::message_t msg_conn;
-    sock_srv->recv(&msg_conn);
-    std::string conn_req(static_cast<char*>(msg_conn.data()), msg_conn.size());
 
-    if (conn_req == "ConnectionRequest")
-        connected = true;
-    // std::string reply = connected ? "OK" : "FAILED";
-    // zmq::message_t msg_reply((void*)(reply.data()), reply.length());
-    // sock_srv->send(msg_reply);
+    // Build a server to initialize connection with every clients
+    auto ctx_conn = std::make_unique<zmq::context_t>();
+    auto sock_conn = std::make_unique<zmq::socket_t>(*ctx_conn, zmq::socket_type::rep);
+    std::string bind_to_conn = make_address_plus_port(address_, port_ + 1);
+    client_ids.reserve(expected_clients_);
+    sock_conn->bind(bind_to_conn);
+
+    // Make sure all expected clients are connected
+    while (client_ids.size() < expected_clients_) {
+      // Receive connection request
+      zmq::message_t msg_conn;
+      sock_conn->recv(&msg_conn);
+      std::string client_id(static_cast<char*>(msg_conn.data()), msg_conn.size());
+      client_ids.push_back(client_id);
+
+      // Reply
+      std::string reply = "OK";
+      zmq::message_t msg_reply((void*)(reply.data()), reply.length());
+      sock_conn->send(msg_reply);
+    }
+    sync_connected = true;
     return true;
   }
 
@@ -83,12 +102,7 @@ class ZmqServer {
     long input_time = now_ms.time_since_epoch().count();
     memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
     sock_srv->send(data_msg);
-
-    // wait for reply
-    zmq::message_t msg_reply;
-    sock_srv->recv(&msg_reply);
-    std::string reply(static_cast<char*>(msg_reply.data()), msg_reply.size());
-    return reply == "OK";
+    return true;
   }
 
   void end_connection() {
@@ -97,11 +111,9 @@ class ZmqServer {
     memcpy(abort_msg_srv.data(), abort_msg.data(), 4);
     sock_srv->send(abort_msg_srv);
     get_average(memcpy_time, "memcpy");
-    connected = false;
+    sync_connected = false;
   }
-
   
-
   // Start the server
   void start() {
   }
@@ -111,7 +123,18 @@ class ZmqServer {
   std::unique_ptr<zmq::socket_t> sock_srv;
 
   std::mutex mu;
-  bool connected=false;
+  bool sync_connected=false;
+
+  // Binding address and port
+  std::string address_;
+  int port_;
+  std::string bind_to;
+
+  // Client information
+  int expected_clients_;
+  std::vector<std::string> client_ids;
+
+  // Statistics
   TimerMicroSecconds timer;
   std::vector<long> memcpy_time;
 };
@@ -124,23 +147,66 @@ class ZmqClient {
   ZmqClient(ZmqClient& other) = delete;
   ZmqClient(ZmqClient&& other) = delete;
   
-  ZmqClient(std::string address) {
+  ZmqClient(std::string address, int port, const std::string& client_id) {
+    addresses_.push_back(address);
+    ports_.push_back(port);
+    id_ = client_id;
+    connect_tos.push_back(address + ":" + std::to_string(port));
+
+    // Make socket client
     ctx_cli = std::make_unique<zmq::context_t>();
-    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, zmq::socket_type::req);
-    sock_cli->connect(address);
+    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, zmq::socket_type::sub);
+    sock_cli->connect(connect_tos[0]);
+    sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+    memcpy_time.reserve(10000);
+    delivery_time.reserve(10000);
+  }
+
+  ZmqClient(std::vector<std::string> addresses, std::vector<int> ports, const std::string& client_id) {
+    // Connected to addresses and self information
+    addresses_ = addresses;
+    ports_ = ports;
+    id_ = client_id;
+    connect_tos.reserve(addresses_.size());
+    for (int i = 0; i < addresses_.size(); ++i) {
+      connect_tos.emplace_back(make_address_plus_port(addresses_[i], ports_[i]));
+    }
+
+    // Make a subscriber socket
+    ctx_cli = std::make_unique<zmq::context_t>();
+    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, zmq::socket_type::sub);
+    for (int i = 0; i < connect_tos.size();++i) {
+      sock_cli->connect(connect_tos[i]);
+    }
+    sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+
+    // Statitics
     memcpy_time.reserve(10000);
     delivery_time.reserve(10000);
   }
 
   // Connect to server
-  bool initial_connection() {
+  bool sync_connection() {
     std::unique_lock<std::mutex> lk(mu);
-    if (connected)
+    if (sync_connected)
       return false;
-    std::string connection_req = "ConnectionRequest";
-    zmq::message_t msg_conn((void*)(connection_req.data()), connection_req.length());
-    sock_cli->send(msg_conn);
-    connected = true;
+
+    // Synchonize to connect to all of the servers
+    for (int i = 0; i < addresses_.size(); ++i) {
+      // Build a server to initialize connection with every clients
+      auto ctx_conn = std::make_unique<zmq::context_t>();
+      auto sock_conn = std::make_unique<zmq::socket_t>(*ctx_conn, zmq::socket_type::req);
+
+      std::string bind_to_conn = make_address_plus_port(addresses_[i], ports_[i] + 1);
+      sock_conn->connect(bind_to_conn);
+
+      zmq::message_t msg_conn((void*)(id_.data()), id_.length());
+      sock_conn->send(msg_conn);
+      zmq::message_t msg_reply;
+      sock_conn->recv(&msg_reply);
+      std::cout << "Client connected to " << bind_to_conn << std::endl;
+    }
+    sync_connected = true;
     return true;
   }
 
@@ -152,7 +218,7 @@ class ZmqClient {
     if (msg_cli.size() == 4)
       if (std::string(static_cast<char*>(msg_cli.data()), 4) == "DONE") {
         finished = true;
-        connected = false;
+        sync_connected = false;
         return false;
       }
 
@@ -170,27 +236,31 @@ class ZmqClient {
     bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
     std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
     memcpy_time.emplace_back(timer.tock_count());
-    std::string reply = valid_data ? "OK" : "FAILED";
-    zmq::message_t msg_reply((char*)(reply.data()), reply.length());
-    sock_cli->send(msg_reply);
+
     return valid_data;
   }
 
   // Start to work as client
   void start() {
   }
-  void end_connection() {connected = false;}
+
+  void end_connection() {sync_connected = false;}
 
   long mean_delivery_time() {return get_average(delivery_time, "delivery");}
 
   long mean_memcpy_time() {return get_average(memcpy_time, "memcpy");}
 
  private:
+  std::string id_;
   std::unique_ptr<zmq::context_t> ctx_cli;
   std::unique_ptr<zmq::socket_t> sock_cli;
 
+  std::vector<std::string> addresses_;
+  std::vector<int> ports_;
+  std::vector<std::string> connect_tos;
+
   std::mutex mu;
-  bool connected=false;
+  bool sync_connected=false;
   bool finished=false;
   TimerMicroSecconds timer;
   std::vector<long> memcpy_time;

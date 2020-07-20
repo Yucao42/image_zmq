@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
 project(zmq_image C CXX)
- 
 option(DO_VIDEO_TEST "Test video transmission" ON)
 option(DO_LABEL_TEST "Test classification result transmission" OFF)
 find_package(OpenCV)
@@ -13,6 +12,8 @@ if (OPENMP_FOUND)
 endif()
 include_directories(
    "./"
+   "${CMAKE_CURRENT_BINARY_DIR}"
+   "$ENV{LOCAL}/usr/local/include"
    "${OpenCV_INCLUDE_DIRS}"
    )
 if(NOT MSVC)
@@ -31,10 +32,30 @@ if (DO_LABEL_TEST)
   add_definitions(-DTEST_LABEL)
 endif()
 
+# Protobuf
+set(CMAKE_PREFIX_PATH $ENV{LOCAL}/usr/local)
+find_package(Protobuf CONFIG REQUIRED)
+set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
+set(hw_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/image.pb.cc")
+set(hw_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/image.pb.h")
+
+get_filename_component(hw_proto "./image.proto" ABSOLUTE)
+get_filename_component(hw_proto_path "${hw_proto}" PATH)
+
+add_custom_command(
+      OUTPUT "${hw_proto_srcs}" "${hw_proto_hdrs}"
+      COMMAND ${_PROTOBUF_PROTOC}
+      ARGS --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+        -I "${hw_proto_path}"
+        "${hw_proto}"
+      DEPENDS "${hw_proto}")
+
+
 # compile zmq database
-add_executable(zmq_server zmq_server.cpp)
-target_link_libraries(zmq_server zmq ${OpenCV_LIBS})     
-add_executable(zmq_client zmq_client.cpp)
-target_link_libraries(zmq_client zmq ${OpenCV_LIBS})     
-add_executable(cs cs.cpp)
-target_link_libraries(cs zmq ${OpenCV_LIBS})     
+add_executable(zmq_server "${hw_proto_srcs}" zmq_server.cpp )
+target_link_libraries(zmq_server zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF})      
+add_executable(zmq_client "${hw_proto_srcs}" zmq_client.cpp )
+target_link_libraries(zmq_client zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF})     
+add_executable(cs cs.cpp "${hw_proto_srcs}")
+target_link_libraries(cs zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF})     

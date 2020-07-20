@@ -14,12 +14,13 @@ int main(int argc, char** argv) {
   size_small.height = 368;
   size_small.width = 640;
 
-  std::string addr("tcp://*:50051");
-  ZmqServer server(addr);
+  std::string addr("tcp://*");
+  int port = 50051;
+  ZmqServer server(addr, port);
 
 #ifdef TEST_LABEL
   ClassificationData label("Car", 0.88);
-  if (server.initial_connection()) {
+  if (server.sync_connection()) {
     std::cout << "Server connection built" << std::endl;
     server.send(&label);
     server.end_connection();
@@ -36,7 +37,7 @@ int main(int argc, char** argv) {
 
   bool read_success = img.read_video(cap);
 
-  if (server.initial_connection()) {
+  if (server.sync_connection()) {
     std::cout << "Server connection built" << std::endl;
     while (read_success) {
       server.send(&img);

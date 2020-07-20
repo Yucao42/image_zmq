@@ -16,8 +16,12 @@
 #include <zmq.hpp>
 
 #include "timer.h"
+#include "image.pb.h"
 
 #define HEADER_OFFSET (sizeof(long))
+
+
+using image_proto::FrameData;
 
 /////////////////////////////////////////////////////
 ////Data structure compatible with ZMQ
@@ -48,7 +52,13 @@ struct ImageData : public Data {
   virtual bool to_bytes(void* buffer) {
     if (data_size == 0)
       return false;
+    
+#ifdef PROTOBUF_SERIALIZE
+    // TODO
+    // auto image = framedata.mutable_image();
+#else
     memcpy(buffer, (void*)(frame.data), data_size);
+#endif
     return true;
   }
 
@@ -56,7 +66,12 @@ struct ImageData : public Data {
     // Expect constant input image
     if (data_size != size)
       return false;
+#ifdef PROTOBUF_SERIALIZE
+    // TODO
+    // auto image = framedata.mutable_image();
+#else
     memcpy((void*)(frame.data), buffer, size);
+#endif
     return true;
   }
 
@@ -82,6 +97,9 @@ struct ImageData : public Data {
   cv::Mat frame;
   bool do_resize=false;
   cv::Size target_size;
+  bool protobuf_serialization=true;
+  std::string serial_data;
+  FrameData framedata;
 };
 
 struct ClassificationData : public Data {
