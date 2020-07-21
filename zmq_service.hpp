@@ -27,6 +27,13 @@ long get_average(const std::vector<long>& stats, const std::string& name="memcpy
   return average;
 }
 
+inline long get_time_since_epoch_count() {
+  auto now = std::chrono::system_clock::now();
+  auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
+  long cur_time = now_ms.time_since_epoch().count();
+  return cur_time;
+}
+
 static std::string make_address_plus_port(const std::string& addr, int port) {
   return addr + ":" + std::to_string(port);
 }
@@ -95,9 +102,7 @@ class ZmqServer {
     memcpy_time.emplace_back(timer.tock_count());
 
     // send data
-    auto now = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-    long input_time = now_ms.time_since_epoch().count();
+    long input_time = get_time_since_epoch_count();
     memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
     memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
     sock_srv->send(data_msg);
@@ -226,9 +231,7 @@ class ZmqClient {
       }
 
     // Read input time in the header field
-    auto now = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-    long cur_time = now_ms.time_since_epoch().count();
+    long cur_time = get_time_since_epoch_count();
     long input_time;
     memcpy(&input_time, (msg_cli.data()), sizeof(long));
     memcpy((void*)(&port), msg_cli.data() + sizeof(long), sizeof(int));
