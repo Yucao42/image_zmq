@@ -18,8 +18,7 @@
 #include "timer.h"
 #include "image.pb.h"
 
-#define HEADER_OFFSET (sizeof(long))
-
+#define HEADER_OFFSET (sizeof(long) + sizeof(int))
 
 using image_proto::FrameData;
 

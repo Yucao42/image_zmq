@@ -18,8 +18,6 @@
 #include "timer.h"
 #include "data_struct.hpp"
 
-#define HEADER_OFFSET (sizeof(long))
-
 long get_average(const std::vector<long>& stats, const std::string& name="memcpy") {
   long average;
   if (stats.size()) {
@@ -101,6 +99,7 @@ class ZmqServer {
     auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
     long input_time = now_ms.time_since_epoch().count();
     memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
+    memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
     sock_srv->send(data_msg);
     return true;
   }
@@ -148,7 +147,7 @@ class ZmqClient {
   ZmqClient(ZmqClient& other) = delete;
   ZmqClient(ZmqClient&& other) = delete;
   
-  ZmqClient(std::string address, int port, const std::string& client_id) {
+  ZmqClient(const std::string& address, int port, const std::string& client_id) {
     addresses_.push_back(address);
     ports_.push_back(port);
     id_ = client_id;
@@ -163,7 +162,9 @@ class ZmqClient {
     delivery_time.reserve(10000);
   }
 
-  ZmqClient(std::vector<std::string> addresses, std::vector<int> ports, const std::string& client_id) {
+  ZmqClient(const std::vector<std::string>& addresses, 
+            const std::vector<int>& ports, 
+            const std::string& client_id) {
     // Connected to addresses and self information
     addresses_ = addresses;
     ports_ = ports;
@@ -216,6 +217,7 @@ class ZmqClient {
   bool recv(Data* data) {
     zmq::message_t msg_cli;
     sock_cli->recv(&msg_cli);
+    int port;
     if (msg_cli.size() == 4)
       if (std::string(static_cast<char*>(msg_cli.data()), 4) == "DONE") {
         finished = true;
@@ -229,7 +231,8 @@ class ZmqClient {
     long cur_time = now_ms.time_since_epoch().count();
     long input_time;
     memcpy(&input_time, (msg_cli.data()), sizeof(long));
-    std::cout << "Client receive image message time (us): " << cur_time - input_time << std::endl;
+    memcpy((void*)(&port), msg_cli.data() + sizeof(long), sizeof(int));
+    std::cout << port << " port Client receive image message time (us): " << cur_time - input_time << std::endl;
     delivery_time.emplace_back(cur_time - input_time);
 
     timer.tick();
