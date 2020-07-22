@@ -18,6 +18,7 @@
 #include "timer.h"
 #include "data_struct.hpp"
 
+// To calculate the mean of time statistics
 long get_average(const std::vector<long>& stats, const std::string& name="memcpy") {
   long average;
   if (stats.size()) {
@@ -27,6 +28,7 @@ long get_average(const std::vector<long>& stats, const std::string& name="memcpy
   return average;
 }
 
+// Current time since epoch in microseconds
 inline long get_time_since_epoch_count() {
   auto now = std::chrono::system_clock::now();
   auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
@@ -47,9 +49,11 @@ class ZmqServer {
   ZmqServer(ZmqServer& other) = delete;
   ZmqServer(ZmqServer&& other) = delete;
   
-  ZmqServer(std::string address, int port, int expected_clients=1) {
+  ZmqServer(std::string address, int port, int expected_clients=1,
+           zmq::socket_type pair_pattern=zmq::socket_type::push) {
+    pair_pattern_ = pair_pattern;
     ctx_srv = std::make_unique<zmq::context_t>();
-    sock_srv = std::make_unique<zmq::socket_t>(*ctx_srv, zmq::socket_type::pub);
+    sock_srv = std::make_unique<zmq::socket_t>(*ctx_srv, pair_pattern_);
     address_ = address;
     port_ = port;
     expected_clients_ = expected_clients;
@@ -77,6 +81,7 @@ class ZmqServer {
       zmq::message_t msg_conn;
       sock_conn->recv(&msg_conn);
       std::string client_id(static_cast<char*>(msg_conn.data()), msg_conn.size());
+      std::cout << msg_conn.data() << " " << (void*)(client_id.data()) << std::endl;
       client_ids.push_back(client_id);
 
       // Reply
@@ -126,6 +131,7 @@ class ZmqServer {
  private:
   std::unique_ptr<zmq::context_t> ctx_srv;
   std::unique_ptr<zmq::socket_t> sock_srv;
+  zmq::socket_type pair_pattern_;
 
   std::mutex mu;
   bool sync_connected=false;
@@ -152,7 +158,9 @@ class ZmqClient {
   ZmqClient(ZmqClient& other) = delete;
   ZmqClient(ZmqClient&& other) = delete;
   
-  ZmqClient(const std::string& address, int port, const std::string& client_id) {
+  ZmqClient(const std::string& address, int port, const std::string& client_id,
+            zmq::socket_type pair_pattern=zmq::socket_type::pull) {
+    pair_pattern_ = pair_pattern;
     addresses_.push_back(address);
     ports_.push_back(port);
     id_ = client_id;
@@ -160,16 +168,20 @@ class ZmqClient {
 
     // Make socket client
     ctx_cli = std::make_unique<zmq::context_t>();
-    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, zmq::socket_type::sub);
+    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern);
     sock_cli->connect(connect_tos[0]);
-    sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+    if (pair_pattern == zmq::socket_type::sub)
+      sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
     memcpy_time.reserve(10000);
     delivery_time.reserve(10000);
   }
 
   ZmqClient(const std::vector<std::string>& addresses, 
             const std::vector<int>& ports, 
-            const std::string& client_id) {
+            const std::string& client_id,
+            bool use_poller=false,
+            zmq::socket_type pair_pattern=zmq::socket_type::pull) {
+    pair_pattern_ = pair_pattern;
     // Connected to addresses and self information
     addresses_ = addresses;
     ports_ = ports;
@@ -181,11 +193,12 @@ class ZmqClient {
 
     // Make a subscriber socket
     ctx_cli = std::make_unique<zmq::context_t>();
-    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, zmq::socket_type::sub);
+    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern_);
     for (int i = 0; i < connect_tos.size();++i) {
       sock_cli->connect(connect_tos[i]);
     }
-    sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+    if (pair_pattern == zmq::socket_type::sub)
+      sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
 
     // Statitics
     memcpy_time.reserve(10000);
@@ -261,6 +274,7 @@ class ZmqClient {
   std::string id_;
   std::unique_ptr<zmq::context_t> ctx_cli;
   std::unique_ptr<zmq::socket_t> sock_cli;
+  zmq::socket_type pair_pattern_;
 
   std::vector<std::string> addresses_;
   std::vector<int> ports_;

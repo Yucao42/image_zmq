@@ -16,7 +16,8 @@
 
 
 void run_client(const std::vector<int>& ports,
-                const std::string& client_id) {
+                const std::string& client_id, 
+                bool use_poller=false) {
   // Client connection infos
   std::string addr("tcp://localhost");
   std::vector<std::string> addres(ports.size(), addr);
@@ -98,16 +99,19 @@ void run_server(int port=50051,
 int main(int argc, char** argv) {
   int num_streams = 1, base_port = 50060, num_to_wait = 0;
   bool test_single_client(false);
+  bool use_poller(false);
   std::vector<std::string> addresses;
   std::vector<int> ports;
 
   // Parse arguments
   if (argc < 3) {
-    std::cout << "\nUsage: ./ffmpeg_image num_streams test_single_client \n" <<std::endl;
+    std::cout << "\nUsage: ./ffmpeg_image num_streams test_single_client use_poller\n" <<std::endl;
     return 0;
   } else {
     num_streams = atoi(argv[1]);
     test_single_client = (atoi(argv[2]) > 0);
+    if (argc > 3)
+      use_poller = (atoi(argv[3]) > 0);
   }
 
   // Launch clients/servers processes
@@ -123,8 +127,8 @@ int main(int argc, char** argv) {
         return 0;
       }  
 
-      // Fork client processes
-      if (!test_single_client) {
+      if (!test_single_client && !use_poller) {
+        // Fork client processes
         if (fork() == 0) {
           std::vector<int> single_port(1, base_port + i * 2);
           run_client(single_port, std::to_string(base_port + i * 2));
@@ -137,9 +141,10 @@ int main(int argc, char** argv) {
   }
 
   // Fork only one client process to connect to every server
-  if (test_single_client) {
+  // Or use poller
+  if (test_single_client | use_poller) {
     if (fork() == 0) {
-      run_client(ports, "Client");
+      run_client(ports, "Client", use_poller);
       return 0;
     }
   }

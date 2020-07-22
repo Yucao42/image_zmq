@@ -43,7 +43,7 @@ struct ImageData : public Data {
  public:
   ImageData() = default;
 
-  ImageData(cv::Size size, int data_type) {
+  ImageData(cv::Size size, int data_type, bool use_proto=false) {
     frame = cv::Mat(size, data_type);
     data_size = frame.total() * frame.channels();
   }
@@ -96,7 +96,7 @@ struct ImageData : public Data {
   cv::Mat frame;
   bool do_resize=false;
   cv::Size target_size;
-  bool protobuf_serialization=true;
+  bool use_proto=false;
   std::string serial_data;
   FrameData framedata;
 };
