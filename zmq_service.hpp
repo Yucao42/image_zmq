@@ -166,8 +166,8 @@ class ZmqClient {
     connect_tos.push_back(address + ":" + std::to_string(port));
 
     // Make socket client
-    ctx_cli = std::make_shared<zmq::context_t>();
-    sock_cli = std::make_shared<zmq::socket_t>(*ctx_cli, pair_pattern);
+    ctx_cli = std::make_unique<zmq::context_t>();
+    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern);
     sock_cli->connect(connect_tos[0]);
     if (pair_pattern == zmq::socket_type::sub)
       sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
@@ -192,20 +192,20 @@ class ZmqClient {
     }
 
     // Make a client socket
-    ctx_cli = std::make_shared<zmq::context_t>(1);
+    ctx_cli = std::make_unique<zmq::context_t>(1);
     if (use_poller) {
       for (auto& connect_to : connect_tos) { 
-        auto sock = std::make_shared<zmq::socket_t>(*ctx_cli, pair_pattern_);
+        auto sock = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern_);
         sock->connect(connect_to);
         if (pair_pattern == zmq::socket_type::sub)
           sock->setsockopt(ZMQ_SUBSCRIBE, "", 0);
-        sock_cli_poll.push_back(sock);
         pollitems.push_back({(void*)(*sock), 0, ZMQ_POLLIN, 0});
+        sock_cli_poll.push_back(std::move(sock));
       }
       poller_size = connect_tos.size();
     } else {
       // Single socket connect to every server
-      sock_cli = std::make_shared<zmq::socket_t>(*ctx_cli, pair_pattern_);
+      sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern_);
       for (int i = 0; i < connect_tos.size();++i) {
         sock_cli->connect(connect_tos[i]);
       }
@@ -257,7 +257,7 @@ class ZmqClient {
     return false;
   }
 
-  bool process_message(zmq::message_t& msg_cli, Data* data) {
+  inline bool process_message(zmq::message_t& msg_cli, Data* data) {
     int port;
     if (msg_cli.size() == 4)
       if (std::string(static_cast<char*>(msg_cli.data()), 4) == "DONE") {
@@ -307,12 +307,11 @@ class ZmqClient {
  private:
   std::string id_;
   zmq::socket_type pair_pattern_;
-  std::shared_ptr<zmq::context_t> ctx_cli;
-  std::shared_ptr<zmq::socket_t> sock_cli;
+  std::unique_ptr<zmq::context_t> ctx_cli;
+  std::unique_ptr<zmq::socket_t> sock_cli;
   
   // For poller
-  std::vector<std::shared_ptr<zmq::context_t> > ctx_cli_poll;
-  std::vector<std::shared_ptr<zmq::socket_t> > sock_cli_poll;
+  std::vector<std::unique_ptr<zmq::socket_t> > sock_cli_poll;
   // std::vector<zmq::socket_t*> sock_cli_poll;
   std::vector<zmq::pollitem_t> pollitems;
   int poller_size;
