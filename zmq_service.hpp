@@ -81,7 +81,6 @@ class ZmqServer {
       zmq::message_t msg_conn;
       sock_conn->recv(&msg_conn);
       std::string client_id(static_cast<char*>(msg_conn.data()), msg_conn.size());
-      std::cout << msg_conn.data() << " " << (void*)(client_id.data()) << std::endl;
       client_ids.push_back(client_id);
 
       // Reply
@@ -167,8 +166,8 @@ class ZmqClient {
     connect_tos.push_back(address + ":" + std::to_string(port));
 
     // Make socket client
-    ctx_cli = std::make_unique<zmq::context_t>();
-    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern);
+    ctx_cli = std::make_shared<zmq::context_t>();
+    sock_cli = std::make_shared<zmq::socket_t>(*ctx_cli, pair_pattern);
     sock_cli->connect(connect_tos[0]);
     if (pair_pattern == zmq::socket_type::sub)
       sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
@@ -182,6 +181,7 @@ class ZmqClient {
             bool use_poller=false,
             zmq::socket_type pair_pattern=zmq::socket_type::pull) {
     pair_pattern_ = pair_pattern;
+    use_poller_ = use_poller;
     // Connected to addresses and self information
     addresses_ = addresses;
     ports_ = ports;
@@ -191,14 +191,27 @@ class ZmqClient {
       connect_tos.emplace_back(make_address_plus_port(addresses_[i], ports_[i]));
     }
 
-    // Make a subscriber socket
-    ctx_cli = std::make_unique<zmq::context_t>();
-    sock_cli = std::make_unique<zmq::socket_t>(*ctx_cli, pair_pattern_);
-    for (int i = 0; i < connect_tos.size();++i) {
-      sock_cli->connect(connect_tos[i]);
+    // Make a client socket
+    ctx_cli = std::make_shared<zmq::context_t>(1);
+    if (use_poller) {
+      for (auto& connect_to : connect_tos) { 
+        auto sock = std::make_shared<zmq::socket_t>(*ctx_cli, pair_pattern_);
+        sock->connect(connect_to);
+        if (pair_pattern == zmq::socket_type::sub)
+          sock->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+        sock_cli_poll.push_back(sock);
+        pollitems.push_back({(void*)(*sock), 0, ZMQ_POLLIN, 0});
+      }
+      poller_size = connect_tos.size();
+    } else {
+      // Single socket connect to every server
+      sock_cli = std::make_shared<zmq::socket_t>(*ctx_cli, pair_pattern_);
+      for (int i = 0; i < connect_tos.size();++i) {
+        sock_cli->connect(connect_tos[i]);
+      }
+      if (pair_pattern == zmq::socket_type::sub)
+        sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
     }
-    if (pair_pattern == zmq::socket_type::sub)
-      sock_cli->setsockopt(ZMQ_SUBSCRIBE, "", 0);
 
     // Statitics
     memcpy_time.reserve(10000);
@@ -230,11 +243,21 @@ class ZmqClient {
     return true;
   }
 
-  // Receiving data
-  // return if valid data is received
-  bool recv(Data* data) {
-    zmq::message_t msg_cli;
-    sock_cli->recv(&msg_cli);
+  bool recv_poll(zmq::message_t& msg_cli) {
+    // Pollitems, num_items, timeout
+    // milleseconds of timeout
+    zmq::poll(pollitems, 500);
+    for (int i = 0; i < poller_size;++i) {
+      if (pollitems[i].revents & ZMQ_POLLIN) {
+        std::cout << "READING POLLER NUM " << i << std::endl;
+        sock_cli_poll[i]->recv(&msg_cli);
+        return true;
+      } 
+    }
+    return false;
+  }
+
+  bool process_message(zmq::message_t& msg_cli, Data* data) {
     int port;
     if (msg_cli.size() == 4)
       if (std::string(static_cast<char*>(msg_cli.data()), 4) == "DONE") {
@@ -256,8 +279,19 @@ class ZmqClient {
     bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
     std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
     memcpy_time.emplace_back(timer.tock_count());
-
     return valid_data;
+  }
+
+  // Receiving data
+  // return if valid data is received
+  bool recv(Data* data) {
+    zmq::message_t msg_cli;
+    bool received(true);
+    if (use_poller_)
+      received = recv_poll(msg_cli);
+    else
+      sock_cli->recv(&msg_cli);
+    return received && process_message(msg_cli, data);
   }
 
   // Start to work as client
@@ -272,9 +306,16 @@ class ZmqClient {
 
  private:
   std::string id_;
-  std::unique_ptr<zmq::context_t> ctx_cli;
-  std::unique_ptr<zmq::socket_t> sock_cli;
   zmq::socket_type pair_pattern_;
+  std::shared_ptr<zmq::context_t> ctx_cli;
+  std::shared_ptr<zmq::socket_t> sock_cli;
+  
+  // For poller
+  std::vector<std::shared_ptr<zmq::context_t> > ctx_cli_poll;
+  std::vector<std::shared_ptr<zmq::socket_t> > sock_cli_poll;
+  // std::vector<zmq::socket_t*> sock_cli_poll;
+  std::vector<zmq::pollitem_t> pollitems;
+  int poller_size;
 
   std::vector<std::string> addresses_;
   std::vector<int> ports_;
@@ -283,6 +324,7 @@ class ZmqClient {
   std::mutex mu;
   bool sync_connected=false;
   bool finished=false;
+  bool use_poller_=false;
   TimerMicroSecconds timer;
   std::vector<long> memcpy_time;
   std::vector<long> delivery_time;

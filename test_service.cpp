@@ -21,7 +21,7 @@ void run_client(const std::vector<int>& ports,
   // Client connection infos
   std::string addr("tcp://localhost");
   std::vector<std::string> addres(ports.size(), addr);
-  ZmqClient client(addres, ports, client_id);
+  ZmqClient client(addres, ports, client_id, use_poller);
 
   // Image size parameter
   cv::Size size_small;
@@ -141,7 +141,6 @@ int main(int argc, char** argv) {
   }
 
   // Fork only one client process to connect to every server
-  // Or use poller
   if (test_single_client | use_poller) {
     if (fork() == 0) {
       run_client(ports, "Client", use_poller);
@@ -149,7 +148,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  num_to_wait = num_streams + (test_single_client? 1 : num_streams);
+  num_to_wait = num_streams + ((test_single_client | use_poller)? 1 : num_streams);
   // Wait for all the server/client processes to finish
   for (int i = 0; i < num_to_wait; ++i)
     wait(NULL);
