@@ -20,20 +20,12 @@
 
 // To calculate the mean of time statistics
 long get_average(const std::vector<long>& stats, const std::string& name="memcpy") {
-  long average;
+  long average=0;
   if (stats.size()) {
     average = std::accumulate(stats.begin(), stats.end(), 0.) / stats.size();
     std::cout << "Average " << name << " time(us): " << average << std::endl;
   }
   return average;
-}
-
-// Current time since epoch in microseconds
-inline long get_time_since_epoch_count() {
-  auto now = std::chrono::system_clock::now();
-  auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
-  long cur_time = now_ms.time_since_epoch().count();
-  return cur_time;
 }
 
 static std::string make_address_plus_port(const std::string& addr, int port) {
@@ -96,19 +88,24 @@ class ZmqServer {
     if (data->data_size == 0)
       return false;
 
-    // data to message
-    timer.tick();
-    zmq::message_t data_msg(data->data_size + HEADER_OFFSET);
+    zmq::message_t data_msg(data->data_size);
 
     // add input time in the header field
-    data->to_bytes((char*)(data_msg.data()) + HEADER_OFFSET);
-    std::cout << "Server memcpy time (us): " << timer.tock_count() << std::endl;
-    memcpy_time.emplace_back(timer.tock_count());
+    data->to_bytes((char*)(data_msg.data()));
 
-    // send data
-    long input_time = get_time_since_epoch_count();
-    memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
-    memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
+    // // data to message
+    // timer.tick();
+    // zmq::message_t data_msg(data->data_size + HEADER_OFFSET);
+
+    // // add input time in the header field
+    // data->to_bytes((char*)(data_msg.data()) + HEADER_OFFSET);
+    // std::cout << "Server memcpy time (us): " << timer.tock_count() << std::endl;
+    // memcpy_time.emplace_back(timer.tock_count());
+
+    // // send data
+    // long input_time = get_time_since_epoch_count();
+    // memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
+    // memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
     sock_srv->send(data_msg);
     return true;
   }
@@ -266,19 +263,20 @@ class ZmqClient {
         return false;
       }
 
-    // Read input time in the header field
-    long cur_time = get_time_since_epoch_count();
-    long input_time;
-    memcpy(&input_time, (msg_cli.data()), sizeof(long));
-    memcpy((void*)(&port), msg_cli.data() + sizeof(long), sizeof(int));
-    std::cout << port << " port Client receive image message time (us): " << cur_time - input_time << std::endl;
-    delivery_time.emplace_back(cur_time - input_time);
+    // // Read input time in the header field
+    // long cur_time = get_time_since_epoch_count();
+    // long input_time;
+    // memcpy(&input_time, (msg_cli.data()), sizeof(long));
+    // memcpy((void*)(&port), msg_cli.data() + sizeof(long), sizeof(int));
+    // std::cout << port << " port Client receive image message time (us): " << cur_time - input_time << std::endl;
+    // delivery_time.emplace_back(cur_time - input_time);
 
-    timer.tick();
-    size_t data_size = msg_cli.size() - HEADER_OFFSET;
-    bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
-    std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
-    memcpy_time.emplace_back(timer.tock_count());
+    // timer.tick();
+    // size_t data_size = msg_cli.size() - HEADER_OFFSET;
+    // bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
+    // std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
+    size_t data_size = msg_cli.size();
+    bool valid_data = data->from_bytes((char*)(msg_cli.data()), data_size);
     return valid_data;
   }
 

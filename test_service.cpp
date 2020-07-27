@@ -1,12 +1,12 @@
 #include <iostream>
-#include <string>
-#include <thread>
 #include <mutex>
-#include <vector>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/wait.h>
 #include <opencv2/opencv.hpp>
+#include <stdio.h>
+#include <string>
+#include <sys/wait.h>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 #include <zmq.hpp>
 
 #include "data_struct.hpp"
@@ -14,10 +14,8 @@
 
 #define NUM_TRANSMISSION_TEST (500)
 
-
-void run_client(const std::vector<int>& ports,
-                const std::string& client_id, 
-                bool use_poller=false) {
+void run_client(const std::vector<int> &ports, const std::string &client_id,
+                bool use_poller = false) {
   // Client connection infos
   std::string addr("tcp://localhost");
   std::vector<std::string> addres(ports.size(), addr);
@@ -32,9 +30,9 @@ void run_client(const std::vector<int>& ports,
 
   // Statistics - FPS
   long init_time = 0, cur_time, time_passed;
-  int total_received, frame_count=0;
+  int total_received=0, frame_count = 0;
   double fps;
-  bool continue_=true;
+  bool continue_ = true;
   if (client.sync_connection()) {
     while (continue_) {
       // Client receive image
@@ -44,9 +42,9 @@ void run_client(const std::vector<int>& ports,
         if (init_time == 0) {
           init_time = cur_time;
         } else {
-          time_passed = cur_time - init_time; 
-          fps = (++total_received) * 1.0 / time_passed * 1000000; 
-          std::cout << "Port " << ports[0] << " FPS: " << fps << std::endl;
+          time_passed = cur_time - init_time;
+          fps = (++total_received) * 1.0 / time_passed * 1000000;
+          std::cout  << ports[0]<< "Port " << total_received << " FPS: " << fps << std::endl;
         }
       }
     }
@@ -57,9 +55,8 @@ void run_client(const std::vector<int>& ports,
   }
 }
 
-
-void run_server(int port=50051, 
-                const std::string video_file="../data/video_1.mp4") {
+void run_server(int port = 50051,
+                const std::string video_file = "../data/video_1.mp4") {
   // Image size parameter
   cv::Size size_small;
   size_small.height = 368;
@@ -77,26 +74,28 @@ void run_server(int port=50051,
   // TImer
   TimerMicroSecconds timer;
   bool read_success = img.read_video(cap);
-  long total_time=0, count=0;
+  long total_time = 0, count = 0;
 
   if (server.sync_connection()) {
     server.send(&img);
-    while (count < NUM_TRANSMISSION_TEST) {
-      timer.tick();
-      // read_success = img.read_video(cap);
-      // std::cout<< "Video reading time " << timer.tock_count() <<std::endl;
+    // while (count < NUM_TRANSMISSION_TEST) {
+    while (read_success) {
       server.send(&img);
+      timer.tick();
       ++count;
+      read_success = img.read_video(cap);
+      std::cout<< "Video reading time " << timer.tock_count() <<std::endl;
+
       total_time += timer.tock_count();
     }
-    std::cout<< "Average Video reading time " << total_time / count <<std::endl;
+    std::cout << "Average Video reading time " << total_time / count
+              << std::endl;
     server.end_connection();
   }
   cap.release();
 }
 
-
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   int num_streams = 1, base_port = 50060, num_to_wait = 0;
   bool test_single_client(false);
   bool use_poller(false);
@@ -105,7 +104,9 @@ int main(int argc, char** argv) {
 
   // Parse arguments
   if (argc < 3) {
-    std::cout << "\nUsage: ./ffmpeg_image num_streams test_single_client use_poller\n" <<std::endl;
+    std::cout
+        << "\nUsage: ./ffmpeg_image num_streams test_single_client use_poller\n"
+        << std::endl;
     return 0;
   } else {
     num_streams = atoi(argv[1]);
@@ -125,7 +126,7 @@ int main(int argc, char** argv) {
         std::cout << "READING VIDEO " << video_file << std::endl;
         run_server(base_port + i * 2, video_file);
         return 0;
-      }  
+      }
 
       if (!test_single_client && !use_poller) {
         // Fork client processes
@@ -137,7 +138,7 @@ int main(int argc, char** argv) {
       } else {
         ports.emplace_back(base_port + i * 2);
       }
-    } 
+    }
   }
 
   // Fork only one client process to connect to every server
@@ -148,7 +149,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  num_to_wait = num_streams + ((test_single_client | use_poller)? 1 : num_streams);
+  num_to_wait =
+      num_streams + ((test_single_client | use_poller) ? 1 : num_streams);
   // Wait for all the server/client processes to finish
   for (int i = 0; i < num_to_wait; ++i)
     wait(NULL);

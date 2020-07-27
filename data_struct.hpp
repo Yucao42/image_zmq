@@ -43,34 +43,33 @@ struct ImageData : public Data {
  public:
   ImageData() = default;
 
-  ImageData(cv::Size size, int data_type, bool use_proto=false) {
+  ImageData(cv::Size size, int data_type, bool use_proto=true) {
+    use_proto_ = use_proto;
     frame = cv::Mat(size, data_type);
     data_size = frame.total() * frame.channels();
   }
 
   virtual bool to_bytes(void* buffer) {
-    if (data_size == 0)
-      return false;
-    
-#ifdef PROTOBUF_SERIALIZE
-    // TODO
-    // auto image = framedata.mutable_image();
-#else
-    memcpy(buffer, (void*)(frame.data), data_size);
-#endif
+    if (use_proto_) {
+      framedata.SerializeToArray((void*)(serial_data.data()), serial_data.size());
+    } else {
+      if (data_size == 0)
+        return false;
+      memcpy(buffer, (void*)(frame.data), data_size);
+    }
     return true;
   }
 
   virtual bool from_bytes(void* buffer, size_t size) {
     // Expect constant input image
-    if (data_size != size)
-      return false;
-#ifdef PROTOBUF_SERIALIZE
-    // TODO
-    // auto image = framedata.mutable_image();
-#else
-    memcpy((void*)(frame.data), buffer, size);
-#endif
+
+    if (use_proto_) {
+      framedata.ParseFromArray(buffer, size);
+    } else {
+      if (data_size != size)
+        return false;
+      memcpy((void*)(frame.data), buffer, size);
+    }
     return true;
   }
 
@@ -89,6 +88,12 @@ struct ImageData : public Data {
         cv::resize(frame, frame, target_size);
       else
         data_size = frame.total() * frame.channels();
+
+      if (use_proto_) {
+        auto proto_img = framedata.mutable_image();
+        proto_img->resize(data_size);
+        memcpy((void*)(proto_img->data()), (void*)frame.data, data_size);
+      }
     }
     return ret;
   }
@@ -96,7 +101,7 @@ struct ImageData : public Data {
   cv::Mat frame;
   bool do_resize=false;
   cv::Size target_size;
-  bool use_proto=false;
+  bool use_proto_=false;
   std::string serial_data;
   FrameData framedata;
 };

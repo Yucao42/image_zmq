@@ -24,6 +24,7 @@ else()
   add_definitions(-D_WIN32_WINNT=0x600)
 endif()
 
+message(STATUS "ZMQ FLAGS ${ZMQFLAGS}")
 add_compile_options(${ZMQFLAGS})
 if (DO_VIDEO_TEST)
   add_definitions(-DTEST_VIDEO)
@@ -44,15 +45,27 @@ set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
 set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
 set(hw_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/image.pb.cc")
 set(hw_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/image.pb.h")
+set(hw_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/image.grpc.pb.cc")
+set(hw_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/image.grpc.pb.h")
 
+# GRPC
+find_package(gRPC CONFIG REQUIRED)
+message(STATUS "Using gRPC ${gRPC_VERSION}")
+set(_GRPC_GRPCPP_UNSECURE gRPC::grpc++_unsecure)
+set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+
+set(_GRPC_GRPCPP_UNSECURE gRPC::grpc++_unsecure)
+set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 get_filename_component(hw_proto "./image.proto" ABSOLUTE)
 get_filename_component(hw_proto_path "${hw_proto}" PATH)
 
 add_custom_command(
-      OUTPUT "${hw_proto_srcs}" "${hw_proto_hdrs}"
+      OUTPUT "${hw_proto_srcs}" "${hw_proto_hdrs}" "${hw_grpc_srcs}" "${hw_grpc_hdrs}"
       COMMAND ${_PROTOBUF_PROTOC}
-      ARGS --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+      ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
+        --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
         -I "${hw_proto_path}"
+        --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
         "${hw_proto}"
       DEPENDS "${hw_proto}")
 
@@ -64,5 +77,6 @@ add_executable(zmq_client "${hw_proto_srcs}" zmq_client.cpp )
 target_link_libraries(zmq_client zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF})     
 add_executable(test_service test_service.cpp "${hw_proto_srcs}")
 target_link_libraries(test_service zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF})     
-# add_executable(trash trash.cpp "${hw_proto_srcs}")
-# target_link_libraries(trash zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF})     
+add_executable(grpc_streamer grpc_streamer.cpp "${hw_proto_srcs}" "${hw_grpc_srcs}")
+target_link_libraries(grpc_streamer zmq ${OpenCV_LIBS} ${_PROTOBUF_LIBPROTOBUF} ${_GRPC_GRPCPP_UNSECURE})     
+    

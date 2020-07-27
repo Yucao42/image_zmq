@@ -4,6 +4,14 @@
 #include <sys/time.h>
 #include <chrono>
 
+// Current time since epoch in microseconds
+inline long get_time_since_epoch_count() {
+  auto now = std::chrono::system_clock::now();
+  auto now_ms = std::chrono::time_point_cast<std::chrono::microseconds>(now);
+  long cur_time = now_ms.time_since_epoch().count();
+  return cur_time;
+}
+
 // It is a stopwatch which ticks and tocks
 template<typename T>
 class Timer {
