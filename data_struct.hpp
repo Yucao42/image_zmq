@@ -51,7 +51,7 @@ struct ImageData : public Data {
 
   virtual bool to_bytes(void* buffer) {
     if (use_proto_) {
-      framedata.SerializeToArray((void*)(serial_data.data()), serial_data.size());
+      framedata.SerializeToArray(buffer, data_size);
     } else {
       if (data_size == 0)
         return false;
@@ -93,6 +93,7 @@ struct ImageData : public Data {
         auto proto_img = framedata.mutable_image();
         proto_img->resize(data_size);
         memcpy((void*)(proto_img->data()), (void*)frame.data, data_size);
+        data_size = framedata.ByteSizeLong();
       }
     }
     return ret;

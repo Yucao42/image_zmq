@@ -90,7 +90,6 @@ class ZmqServer {
 
     zmq::message_t data_msg(data->data_size);
 
-    // add input time in the header field
     data->to_bytes((char*)(data_msg.data()));
 
     // // data to message
