@@ -65,6 +65,7 @@ struct ImageData : public Data {
 
     if (use_proto_) {
       framedata.ParseFromArray(buffer, size);
+      // std::cout << "DATA SIZE " << framedata.image().size()<< std::endl;
     } else {
       if (data_size != size)
         return false;
@@ -94,6 +95,7 @@ struct ImageData : public Data {
         proto_img->resize(data_size);
         memcpy((void*)(proto_img->data()), (void*)frame.data, data_size);
         data_size = framedata.ByteSizeLong();
+        std::cout << "DATA SIZE " << data_size << std::endl;
       }
     }
     return ret;

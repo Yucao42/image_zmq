@@ -84,27 +84,40 @@ class ZmqServer {
     return true;
   }
 
+  bool send(void* data, size_t size) {
+    if (size == 0)
+      return false;
+
+    zmq::message_t data_msg(size + HEADER_OFFSET);
+    long input_time = get_time_since_epoch_count();
+    memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
+    memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
+    memcpy(data_msg.data() + HEADER_OFFSET, data, size);
+    sock_srv->send(data_msg);
+    return true;
+  }
+
   bool send(Data* data) {
     if (data->data_size == 0)
       return false;
 
-    zmq::message_t data_msg(data->data_size);
+    // zmq::message_t data_msg(data->data_size);
 
-    data->to_bytes((char*)(data_msg.data()));
+    // data->to_bytes((char*)(data_msg.data()));
 
-    // // data to message
-    // timer.tick();
-    // zmq::message_t data_msg(data->data_size + HEADER_OFFSET);
+    // data to message
+    timer.tick();
+    zmq::message_t data_msg(data->data_size + HEADER_OFFSET);
 
-    // // add input time in the header field
-    // data->to_bytes((char*)(data_msg.data()) + HEADER_OFFSET);
-    // std::cout << "Server memcpy time (us): " << timer.tock_count() << std::endl;
+    // add input time in the header field
+    data->to_bytes((char*)(data_msg.data()) + HEADER_OFFSET);
+    std::cout << "Server memcpy time (us): " << timer.tock_count() << std::endl;
     // memcpy_time.emplace_back(timer.tock_count());
 
     // // send data
-    // long input_time = get_time_since_epoch_count();
-    // memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
-    // memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
+    long input_time = get_time_since_epoch_count();
+    memcpy(data_msg.data(), (void*)(&input_time), sizeof(long));
+    memcpy(data_msg.data() + sizeof(long), (void*)(&port_), sizeof(int));
     sock_srv->send(data_msg);
     return true;
   }
@@ -262,20 +275,21 @@ class ZmqClient {
         return false;
       }
 
-    // // Read input time in the header field
-    // long cur_time = get_time_since_epoch_count();
-    // long input_time;
-    // memcpy(&input_time, (msg_cli.data()), sizeof(long));
-    // memcpy((void*)(&port), msg_cli.data() + sizeof(long), sizeof(int));
-    // std::cout << port << " port Client receive image message time (us): " << cur_time - input_time << std::endl;
-    // delivery_time.emplace_back(cur_time - input_time);
+    // Read input time in the header field
+    long cur_time = get_time_since_epoch_count();
+    long input_time;
+    memcpy(&input_time, (msg_cli.data()), sizeof(long));
+    memcpy((void*)(&port), msg_cli.data() + sizeof(long), sizeof(int));
+    std::cout << msg_cli.size() << " port Client receive image message time (us): " << cur_time - input_time << std::endl;
+    delivery_time.emplace_back(cur_time - input_time);
 
-    // timer.tick();
-    // size_t data_size = msg_cli.size() - HEADER_OFFSET;
-    // bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
-    // std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
-    size_t data_size = msg_cli.size();
-    bool valid_data = data->from_bytes((char*)(msg_cli.data()), data_size);
+    timer.tick();
+    size_t data_size = msg_cli.size() - HEADER_OFFSET;
+    bool valid_data = data->from_bytes((char*)(msg_cli.data()) + HEADER_OFFSET, data_size);
+    std::cout << "Client memcpy time (us): " << timer.tock_count() << std::endl;
+
+    // size_t data_size = msg_cli.size();
+    // bool valid_data = data->from_bytes((char*)(msg_cli.data()), data_size);
     return valid_data;
   }
 
@@ -289,6 +303,26 @@ class ZmqClient {
     else
       sock_cli->recv(&msg_cli);
     return received && process_message(msg_cli, data);
+  }
+
+  // Receiving data
+  // return if valid data is received
+  bool recv(void* data, size_t size) {
+    zmq::message_t msg_cli;
+    bool received(true);
+    if (use_poller_)
+      received = recv_poll(msg_cli);
+    else
+      sock_cli->recv(&msg_cli);
+    // if (msg_cli.size() > size)
+    //   return false;
+    long cur_time = get_time_since_epoch_count();
+    long input_time;
+    memcpy(&input_time, (msg_cli.data()), sizeof(long));
+    memcpy(data, (char*)msg_cli.data() + HEADER_OFFSET, size);
+    std::cout << "Client receive image message time (us): " << cur_time - input_time << std::endl;
+
+    return true;
   }
 
   // Start to work as client

@@ -26,6 +26,8 @@
 #include "image.grpc.pb.h"
 #include "image.pb.h"
 
+#define NUM_TRANSMISSION_TEST (500)
+
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::ClientReader;
@@ -59,13 +61,17 @@ class StreamServiceImpl final : public StreamService::Service {
     cv::Mat image;
     TimerMicroSecconds timer;
     bool ret = cap.read(image);
+    cv::resize(image, image, size);
     size_t num_pixels = 368 * 640 * 3;
     auto frame_bytes = framedata.mutable_image();
+    int count = 0;
     frame_bytes->resize(num_pixels);
+    // while (++count < NUM_TRANSMISSION_TEST) {
     while (ret) {
       cv::resize(image, image, size);
       std::cout << "Reading video time(ns): " << timer.tock_count() <<std::endl;
       memcpy((void*)(frame_bytes->data()), (void*)(image.data), num_pixels);
+      framedata.set_time_point(get_time_since_epoch_count());
       writer->Write(framedata);
       
       timer.tick();
@@ -109,7 +115,7 @@ class StreamServiceClient {
       } else {
         time_passed = cur_time - init_time;
         fps = (++total_received) * 1.0 / time_passed * 1000000;
-        std::cout << "Received number of frames: " << total_received << " FPS: " << fps << std::endl;
+        std::cout << cur_time - framedata.time_point() << "Received number of frames: " << total_received << " FPS: " << fps << std::endl;
       }
     }
     std::cout << "FINAL FPS " << fps << std::endl;

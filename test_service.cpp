@@ -14,6 +14,8 @@
 
 #define NUM_TRANSMISSION_TEST (500)
 
+static bool using_proto = false;
+
 void run_client(const std::vector<int> &ports, const std::string &client_id,
                 bool use_poller = false) {
   // Client connection infos
@@ -26,6 +28,7 @@ void run_client(const std::vector<int> &ports, const std::string &client_id,
   size_small.height = 368;
   size_small.width = 640;
   ImageData img(size_small, CV_8UC3);
+  size_t size = 368 * 640 * 3;
   TimerMicroSecconds timer;
 
   // Statistics - FPS
@@ -36,7 +39,10 @@ void run_client(const std::vector<int> &ports, const std::string &client_id,
   if (client.sync_connection()) {
     while (continue_) {
       // Client receive image
-      continue_ = client.recv(&img);
+      if (using_proto)
+        continue_ = client.recv(&img);
+      else 
+        continue_ = client.recv((void*)img.frame.data, size);
       {
         cur_time = get_time_since_epoch_count();
         if (init_time == 0) {
@@ -66,6 +72,7 @@ void run_server(int port = 50051,
   ImageData img;
   img.set_resize(size_small);
   cv::VideoCapture cap(video_file);
+  cv::Mat image_mat;
 
   // Make a server
   std::string addr("tcp://*");
@@ -74,18 +81,29 @@ void run_server(int port = 50051,
   // TImer
   TimerMicroSecconds timer;
   bool read_success = img.read_video(cap);
+  cap.read(image_mat);
+  cv::resize(image_mat, image_mat, size_small);
   long total_time = 0, count = 0;
+  size_t size = 368 * 640 * 3;
 
   if (server.sync_connection()) {
     server.send(&img);
     // while (count < NUM_TRANSMISSION_TEST) {
     while (read_success) {
-      server.send(&img);
+      if (using_proto)
+        server.send((void*)img.frame.data, size);
+      else {
+        cv::resize(image_mat, image_mat, size_small);
+        server.send((void*)image_mat.data, size);
+      }
+
       timer.tick();
       ++count;
-      read_success = img.read_video(cap);
+      if (using_proto)
+        read_success = img.read_video(cap);
+      else
+        read_success = cap.read(image_mat);
       std::cout<< "Video reading time " << timer.tock_count() <<std::endl;
-
       total_time += timer.tock_count();
     }
     std::cout << "Average Video reading time " << total_time / count
